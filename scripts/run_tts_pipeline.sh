@@ -4,7 +4,7 @@ set -e
 
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/src/data_collection"
 
-echo "Starting Sarvam TTS Distillation Pipeline..."
+echo "Starting TTS distillation pipeline..."
 
 # 1. Generating TTS audio from Teacher
 echo "Step 1: Running TTS Generator Worker"
@@ -32,4 +32,12 @@ echo "Step 3: Training Distilled TTS Student Model"
 python src/models/train_tts_student.py \
     --config config/tts_config.yaml
 
-echo "TTS Pipeline Complete!"
+if [ -d data/processed/tts_teacher_audio ] && [ -f data/eval/tts_dev.txt ]; then
+    echo "Step 4: Evaluating generated TTS audio on held-out prompts"
+    python src/evaluation/evaluate_tts.py \
+        --config config/tts_config.yaml \
+        --input_dir data/processed/tts_teacher_audio \
+        --output_json reports/tts_eval.json
+fi
+
+echo "TTS pipeline complete!"

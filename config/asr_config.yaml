@@ -3,12 +3,24 @@ api:
   max_retries: 5
   timeout: 60
 
+teacher:
+  provider: "faster_whisper"
+  model_name: "openai/whisper-large-v3-turbo"
+  device: "auto"
+  compute_type: "auto"
+  beam_size: 1
+  vad_filter: true
+
 data:
   raw_dir: "data/raw/asr"
   shards_dir: "data/shards/asr"
   train_split: 0.95
   max_audio_length_seconds: 30.0
   min_audio_length_seconds: 0.2
+
+eval:
+  manifest_path: "data/eval/asr_dev.jsonl"
+  output_path: "reports/asr_eval.json"
 
 filtering:
   min_confidence: 0.8

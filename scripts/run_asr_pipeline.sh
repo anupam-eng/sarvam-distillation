@@ -4,7 +4,7 @@ set -e
 
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/src/data_collection"
 
-echo "Starting Sarvam ASR Distillation Pipeline..."
+echo "Starting ASR distillation pipeline..."
 
 # 1. Labeling
 echo "Step 1: Running ASR Labeler Worker"
@@ -33,4 +33,14 @@ echo "Step 4: Training Distilled ASR Student Model"
 python -m torch.distributed.launch --nproc_per_node=1 src/models/train_asr_student.py \
     --config config/asr_config.yaml
 
-echo "ASR Pipeline Complete!"
+if [ -f data/eval/asr_dev.jsonl ]; then
+    echo "Step 5: Evaluating ASR student on held-out dev set"
+    python src/evaluation/evaluate_asr.py \
+        --config config/asr_config.yaml \
+        --manifest data/eval/asr_dev.jsonl \
+        --model_name_or_path models/asr_student \
+        --backend wav2vec2_ctc \
+        --output_json reports/asr_eval.json
+fi
+
+echo "ASR pipeline complete!"

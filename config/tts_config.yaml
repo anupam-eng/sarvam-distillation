@@ -3,11 +3,21 @@ api:
   max_retries: 5
   timeout: 60
 
+teacher:
+  provider: "transformers_vits"
+  model_name: "facebook/mms-tts-eng"
+  device: "auto"
+
 data:
   raw_text_file: "data/raw/tts_sentences.txt"
   output_audio_dir: "data/raw/tts_audio"
   shards_dir: "data/shards/tts"
   sample_rate: 22050
+
+eval:
+  prompts_path: "data/eval/tts_dev.txt"
+  output_path: "reports/tts_eval.json"
+  asr_model_name: "openai/whisper-large-v3-turbo"
   
 training:
   student_model_name: "microsoft/speecht5_tts" 
