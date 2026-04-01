@@ -1,0 +1,94 @@
+project:
+  name: "vits_dataset_training"
+  seed: 17
+
+download:
+  enabled: true
+  source: "indicvoices_public_archives"
+  hf_dataset_name: "ai4bharat/IndicVoices"
+  hf_config_name: "hindi"
+  hf_token_env: "HF_TOKEN"
+  splits:
+    - "train"
+  output_root: "data/raw/indicvoices_hindi"
+  audio_field: "audio_filepath"
+  transcript_priority:
+    - "normalized"
+    - "text"
+    - "verbatim"
+  public_archives:
+    language_name: "Hindi"
+    versions: [1, 2]
+    archive_url_template: "https://iv-release.objectstore.e2enetworks.net/dmu_release/v{version}_{language_name}_train.tgz"
+  preserve_download_cache: true
+  min_duration_seconds: 1.0
+  max_duration_seconds: 12.0
+  min_text_chars: 3
+  max_text_chars: 250
+  include_task_names: []
+  exclude_task_names: []
+  include_scenarios: []
+  exclude_scenarios: []
+  speaker_selection:
+    mode: "mixed_segments"
+    speaker_id: ""
+    min_speaker_hours: 0.5
+    max_hours: 6.0
+    max_samples: 12000
+
+dataset:
+  source_root: "data/raw/indicvoices_hindi"
+  manifest_path: "data/raw/indicvoices_hindi/metadata.csv"
+  manifest_format: "csv"
+  delimiter: "|"
+  has_header: true
+  audio_column: "audio_path"
+  text_column: "text"
+  speaker_column: ""
+  default_speaker_name: "indicvoices_hindi_selected"
+  language: "hi"
+  target_sample_rate: 22050
+  min_text_chars: 3
+  max_text_chars: 250
+  min_audio_seconds: 1.0
+  max_audio_seconds: 12.0
+  eval_split_ratio: 0.02
+  eval_max_samples: 200
+  normalize_whitespace: true
+  processed_dir: "data/processed/vits_dataset"
+
+audio:
+  sample_rate: 22050
+  fft_size: 1024
+  win_length: 1024
+  hop_length: 256
+  num_mels: 80
+  mel_fmin: 0.0
+  mel_fmax: null
+
+model:
+  text_cleaner: "multilingual_cleaners"
+  use_phonemes: false
+  phoneme_language: null
+  add_blank: true
+
+training:
+  output_dir: "models/vits_dataset"
+  run_name: "vits_dataset"
+  epochs: 1000
+  batch_size: 16
+  eval_batch_size: 8
+  num_loader_workers: 4
+  num_eval_loader_workers: 2
+  mixed_precision: true
+  print_step: 25
+  save_step: 1000
+  save_n_checkpoints: 5
+  save_best_after: 1000
+  lr_gen: 0.0002
+  lr_disc: 0.0002
+
+inference:
+  prompts_file: "data/processed/vits_dataset/eval_prompts.txt"
+  output_dir: "reports/synthesis_samples"
+  max_samples: 10
