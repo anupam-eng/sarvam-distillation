@@ -1,0 +1,22 @@
+api:
+  endpoint: "https://api.sarvam.ai/tts"
+  max_retries: 5
+  timeout: 60
+
+data:
+  raw_text_file: "data/raw/tts_sentences.txt"
+  output_audio_dir: "data/raw/tts_audio"
+  shards_dir: "data/shards/tts"
+  sample_rate: 22050
+  
+training:
+  student_model_name: "microsoft/speecht5_tts" 
+  vocoder_name: "microsoft/speecht5_hifigan"
+  output_dir: "models/tts_student"
+  learning_rate: 1e-4
+  batch_size: 32
+  gradient_accumulation_steps: 1
+  warmup_steps: 4000
+  eval_steps: 500
+  save_steps: 1000
+  mixed_precision: "fp16"

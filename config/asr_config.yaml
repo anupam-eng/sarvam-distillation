@@ -1,0 +1,28 @@
+api:
+  endpoint: "https://api.sarvam.ai/asr"
+  max_retries: 5
+  timeout: 60
+
+data:
+  raw_dir: "data/raw/asr"
+  shards_dir: "data/shards/asr"
+  train_split: 0.95
+  max_audio_length_seconds: 30.0
+  min_audio_length_seconds: 0.2
+
+filtering:
+  min_confidence: 0.8
+  drop_missing_language: true
+
+training:
+  student_model_name: "facebook/wav2vec2-base"
+  output_dir: "models/asr_student"
+  learning_rate: 3e-5
+  weight_decay: 0.01
+  warmup_steps: 10000
+  batch_size: 16
+  gradient_accumulation_steps: 2
+  logging_steps: 100
+  eval_steps: 1000
+  save_steps: 5000
+  mixed_precision: "fp16"
