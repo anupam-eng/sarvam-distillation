@@ -2,45 +2,88 @@
 
 Validation plan: see `VALIDATION.md`.
 
-Open-model runtime guide: see `RUNPOD.md`.
+RunPod/runtime notes: see `RUNPOD.md`.
 
-## Quick Start
+## Final Stack
 
-Default local teachers:
+- ASR student: `openai/whisper-medium`
+- ASR teacher: none for training
+- TTS student: `VITS` via `Coqui TTS`
+- TTS teacher: Indic-capable `Coqui Fairseq VITS` teacher by default
+- Text corpus: `ai4bharat/IndicCorpV2`
 
-- ASR teacher: `openai/whisper-large-v3-turbo` via `faster-whisper`
-- TTS teacher: `facebook/mms-tts-eng` via `transformers`
+`XTTS-v2` support is still available in `src/data_collection/tts_generator.py`, but it is not the default teacher because it does not natively cover most Indic native-script text. The default pipeline uses an Indic-capable Coqui teacher instead.
+
+## Pipeline
+
+The repo now follows this flow:
+
+1. pull prompts from `IndicCorpV2`
+2. filter and split them into train/eval prompt files
+3. synthesize teacher audio from those prompts
+4. build a `VITS` training dataset from the generated `(text, audio)` pairs
+5. train the `VITS` student
+6. reuse the same generated `(text, audio)` pairs to build ASR manifests
+7. train `Whisper-medium` as the ASR student
+8. evaluate TTS through ASR backtranscription and evaluate ASR on held-out manifests
+9. log each run to experiment JSONL files
+
+## Main Commands
 
 Install dependencies:
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
-Run the ASR pipeline:
+Run the full pipeline:
 
 ```bash
-bash scripts/run_asr_pipeline.sh
+bash scripts/run_full_pipeline.sh
 ```
 
-Run the TTS pipeline:
+Run only TTS:
 
 ```bash
 bash scripts/run_tts_pipeline.sh
 ```
 
-## Evaluation Inputs
+Run only ASR:
 
-ASR evaluation manifest format: `data/eval/asr_dev.jsonl`
-
-```json
-{"audio_path": "../raw/asr/sample.wav", "text": "reference transcript", "language": "en"}
+```bash
+bash scripts/run_asr_pipeline.sh
 ```
 
-TTS evaluation uses generated `.wav` + `.json` pairs in a directory. The sidecar JSON must include at least:
+## Important Paths
 
-```json
-{"text": "reference text", "language": "en"}
-```
+- TTS prompt files:
+  - `data/processed/tts_prompts_train.txt`
+  - `data/processed/tts_prompts_eval.txt`
+- Teacher audio:
+  - `data/processed/tts_teacher_audio/train`
+  - `data/processed/tts_teacher_audio/eval`
+- Coqui VITS dataset:
+  - `data/processed/tts_student_dataset`
+- ASR manifests:
+  - `data/processed/asr_train.jsonl`
+  - `data/processed/asr_eval.jsonl`
+- Experiment logs:
+  - `data/experiments/tts_runs.jsonl`
+  - `data/experiments/asr_runs.jsonl`
 
-Sample file-format notes are in `data/eval/README.md`.
+## Config Files
+
+- `config/tts_config.yaml`
+  - controls `IndicCorpV2` prompt preparation
+  - controls teacher TTS model selection
+  - controls `VITS` student training
+- `config/asr_config.yaml`
+  - controls ASR manifest building
+  - controls `Whisper-medium` training and evaluation
+
+## Notes
+
+- The ASR student is trained without an ASR teacher.
+- The current ASR pipeline assumes one language per run for Whisper prefix tokens.
+- The strongest ASR version of this project will still come from mixing generated speech with real speech later.
+- `XTTS-v2` remains optional if you decide to switch to supported languages or use a transliteration bridge.

@@ -1,43 +1,54 @@
 #!/bin/bash
-# scripts/run_tts_pipeline.sh
-set -e
+set -euo pipefail
 
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/src/data_collection"
+echo "Starting TTS teacher and VITS student pipeline..."
 
-echo "Starting TTS distillation pipeline..."
+echo "Step 1: Preparing IndicCorp prompts"
+python3 src/data_collection/prepare_indiccorp_text.py --config config/tts_config.yaml
 
-# 1. Generating TTS audio from Teacher
-echo "Step 1: Running TTS Generator Worker"
-touch data/raw/tts_sentences.txt
-
-if [ ! -s data/raw/tts_sentences.txt ]; then
-    echo "Warning: No sentences found in data/raw/tts_sentences.txt. Add some text for TTS distillation."
-    echo "Example: 'The quick brown fox jumps over the lazy dog.'" > data/raw/tts_sentences.txt
-fi
-
-python src/data_collection/tts_generator.py \
+echo "Step 2: Generating teacher audio for train split"
+python3 src/data_collection/tts_generator.py \
     --config config/tts_config.yaml \
-    --input_text_file data/raw/tts_sentences.txt \
-    --output_dir data/processed/tts_teacher_audio
+    --input_text_file data/processed/tts_prompts_train.txt \
+    --output_dir data/processed/tts_teacher_audio/train
 
-# 2. Sharding
-echo "Step 2: Creating WebDataset Shards"
-python src/data_collection/create_shards.py \
-    --input_dir data/processed/tts_teacher_audio \
-    --output_dir data/shards/tts \
-    --shard_prefix tts_shard
+echo "Step 3: Generating teacher audio for eval split"
+python3 src/data_collection/tts_generator.py \
+    --config config/tts_config.yaml \
+    --input_text_file data/processed/tts_prompts_eval.txt \
+    --output_dir data/processed/tts_teacher_audio/eval
 
-# 3. Training
-echo "Step 3: Training Distilled TTS Student Model"
-python src/models/train_tts_student.py \
-    --config config/tts_config.yaml
+echo "Step 4: Preparing Coqui VITS dataset"
+python3 src/data_collection/prepare_tts_dataset.py --config config/tts_config.yaml
 
-if [ -d data/processed/tts_teacher_audio ] && [ -f data/eval/tts_dev.txt ]; then
-    echo "Step 4: Evaluating generated TTS audio on held-out prompts"
-    python src/evaluation/evaluate_tts.py \
+echo "Step 5: Evaluating teacher audio quality"
+python3 src/evaluation/evaluate_tts.py \
+    --config config/tts_config.yaml \
+    --input_dir data/processed/tts_teacher_audio/eval \
+    --output_json reports/tts_teacher_eval.json
+
+echo "Step 6: Training VITS student"
+python3 src/models/train_tts_student.py --config config/tts_config.yaml
+
+if [ -f models/tts_student/best_model.pth ] && [ -f models/tts_student/config.json ]; then
+    echo "Step 7: Generating VITS student eval samples"
+    python3 src/models/generate_tts_student_samples.py \
         --config config/tts_config.yaml \
-        --input_dir data/processed/tts_teacher_audio \
-        --output_json reports/tts_eval.json
+        --input_text_file data/processed/tts_prompts_eval.txt \
+        --output_dir data/processed/tts_student_audio/eval
+
+    echo "Step 8: Evaluating VITS student samples"
+    python3 src/evaluation/evaluate_tts.py \
+        --config config/tts_config.yaml \
+        --input_dir data/processed/tts_student_audio/eval \
+        --output_json reports/tts_student_eval.json
+
+    echo "Step 9: Logging TTS experiment"
+    python3 src/evaluation/log_experiment.py \
+        --task tts \
+        --report reports/tts_student_eval.json \
+        --config config/tts_config.yaml \
+        --output data/experiments/tts_runs.jsonl
 fi
 
 echo "TTS pipeline complete!"

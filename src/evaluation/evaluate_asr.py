@@ -7,7 +7,7 @@ import torch
 import torchaudio
 import yaml
 
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 
 def parse_args():
@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--config", type=str, default="../../config/asr_config.yaml")
     parser.add_argument("--manifest", type=str, required=True)
     parser.add_argument("--model_name_or_path", type=str, required=True)
-    parser.add_argument("--backend", type=str, default="wav2vec2_ctc", choices=["wav2vec2_ctc", "faster_whisper"])
+    parser.add_argument("--backend", type=str, default="whisper_seq2seq", choices=["whisper_seq2seq", "faster_whisper"])
     parser.add_argument("--output_json", type=str, default=None)
     parser.add_argument("--limit", type=int, default=0)
     return parser.parse_args()
@@ -55,26 +55,30 @@ def resample_waveform(waveform, sample_rate, target_sample_rate):
     return resampler(waveform)
 
 
-def build_wav2vec2_predictor(model_name_or_path):
+def build_whisper_predictor(model_name_or_path, default_language=None, task="transcribe"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    processor = Wav2Vec2Processor.from_pretrained(model_name_or_path)
-    model = Wav2Vec2ForCTC.from_pretrained(model_name_or_path).to(device)
+    processor = WhisperProcessor.from_pretrained(model_name_or_path)
+    model = WhisperForConditionalGeneration.from_pretrained(model_name_or_path).to(device)
     model.eval()
+    model.generation_config.forced_decoder_ids = None
 
     def predict(audio_path, language=None):
         waveform, sample_rate = torchaudio.load(audio_path)
         waveform = resample_waveform(waveform, sample_rate, 16000)
-        inputs = processor(
+        inputs = processor.feature_extractor(
             waveform.squeeze().numpy(),
             sampling_rate=16000,
             return_tensors="pt",
-            padding=True,
         )
         inputs = {key: value.to(device) for key, value in inputs.items()}
         with torch.no_grad():
-            logits = model(**inputs).logits
-        predicted_ids = torch.argmax(logits, dim=-1)
-        transcript = processor.batch_decode(predicted_ids)[0]
+            predicted_ids = model.generate(
+                **inputs,
+                language=language or default_language,
+                task=task,
+                max_new_tokens=225,
+            )
+        transcript = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
         return transcript.strip()
 
     return predict
@@ -109,8 +113,12 @@ def main():
     if not samples:
         raise ValueError(f"No samples found in manifest: {args.manifest}")
 
-    if args.backend == "wav2vec2_ctc":
-        predict = build_wav2vec2_predictor(args.model_name_or_path)
+    if args.backend == "whisper_seq2seq":
+        predict = build_whisper_predictor(
+            args.model_name_or_path,
+            default_language=config.get("training", {}).get("language"),
+            task=config.get("training", {}).get("task", "transcribe"),
+        )
     else:
         predict = build_faster_whisper_predictor(args.model_name_or_path)
 

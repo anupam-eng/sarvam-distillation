@@ -1,58 +1,86 @@
 import argparse
 import os
+
 import yaml
-import torch
-import webdataset as wds
-from transformers import (
-    SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan,
-    TrainingArguments, Trainer
-)
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train TTS Student (Distillation)")
+    parser = argparse.ArgumentParser(description="Train a VITS student with Coqui TTS")
     parser.add_argument("--config", type=str, default="../../config/tts_config.yaml")
     return parser.parse_args()
 
+
 def main():
     args = parse_args()
-    with open(args.config, "r") as f:
-        config = yaml.safe_load(f)
+    with open(args.config, "r", encoding="utf-8") as handle:
+        config = yaml.safe_load(handle)
 
-    print("Loading TTS Teacher-Student framework...")
-    student_model_name = config["training"]["student_model_name"]
-    
-    try:
-        processor = SpeechT5Processor.from_pretrained(student_model_name)
-        model = SpeechT5ForTextToSpeech.from_pretrained(student_model_name)
-        vocoder = SpeechT5HifiGan.from_pretrained(config["training"]["vocoder_name"])
-    except Exception as e:
-        print(f"Error loading models: {e}\nNote: Depending on the Hugging Face hub, these models may need to be downloaded or specific versions used.")
-        return
-        
-    shard_pattern = os.path.join(config["data"]["shards_dir"], "*.tar")
-    dataset = wds.WebDataset(shard_pattern).decode("l").to_tuple("wav", "json")
-    
-    def transform(sample):
-        wav_bytes, json_data = sample
-        import io, torchaudio
-        waveform, sample_rate = torchaudio.load(io.BytesIO(wav_bytes))
-        
-        if sample_rate != 16000:
-            resampler = torchaudio.transforms.Resample(sample_rate, 16000)
-            waveform = resampler(waveform)
+    dataset_dir = config["data"]["student_dataset_dir"]
+    metadata_path = os.path.join(dataset_dir, "metadata.csv")
+    if not os.path.exists(metadata_path):
+        raise FileNotFoundError(f"Missing Coqui dataset metadata: {metadata_path}")
 
-        text = json_data["text"]
-        inputs = processor(text=text, return_tensors="pt")
-        
-        # Typically requires feature extraction for mel-spectrogram labels
-        return {
-            "input_ids": inputs.input_ids[0], 
-            "labels": waveform.squeeze() 
-        }
-        
-    mapped_dataset = dataset.map(transform)
+    from trainer import Trainer, TrainerArgs
+    from TTS.config.shared_configs import BaseAudioConfig
+    from TTS.tts.configs.shared_configs import BaseDatasetConfig
+    from TTS.tts.configs.vits_config import VitsConfig
+    from TTS.tts.datasets import load_tts_samples
+    from TTS.tts.models.vits import Vits
+    from TTS.tts.utils.text.tokenizer import TTSTokenizer
+    from TTS.utils.audio import AudioProcessor
 
-    print("TTS Skeleton initialized. Note: Full TTS training via Trainer requires a custom collator to unpack mel-spectrograms from teacher waves for proper FastSpeech/SpeechT5 distillation loss.")
+    output_dir = os.path.abspath(config["training"]["output_dir"])
+    os.makedirs(output_dir, exist_ok=True)
+
+    dataset_config = BaseDatasetConfig(
+        formatter="ljspeech",
+        meta_file_train="metadata.csv",
+        path=os.path.abspath(dataset_dir),
+        language=config["training"].get("language"),
+    )
+    audio_config = BaseAudioConfig(
+        sample_rate=config["data"].get("sample_rate", 22050),
+        resample=False,
+        do_trim_silence=False,
+    )
+    vits_config = VitsConfig(
+        output_path=output_dir,
+        run_name="vits_student",
+        batch_size=config["training"]["batch_size"],
+        eval_batch_size=config["training"]["eval_batch_size"],
+        num_loader_workers=config["training"]["num_loader_workers"],
+        num_eval_loader_workers=config["training"]["num_eval_loader_workers"],
+        epochs=config["training"]["num_epochs"],
+        mixed_precision=config["training"]["mixed_precision"],
+        print_step=config["training"]["print_step"],
+        save_step=config["training"]["save_step"],
+        eval_split_size=config["training"]["eval_split_size"],
+        run_eval=True,
+        use_phonemes=config["training"].get("use_phonemes", False),
+        text_cleaner=config["training"].get("text_cleaner", "basic_cleaners"),
+        audio=audio_config,
+        datasets=[dataset_config],
+    )
+
+    audio_processor = AudioProcessor.init_from_config(vits_config)
+    tokenizer, vits_config = TTSTokenizer.init_from_config(vits_config)
+    train_samples, eval_samples = load_tts_samples(
+        dataset_config,
+        eval_split=True,
+        eval_split_size=vits_config.eval_split_size,
+        eval_split_max_size=vits_config.eval_split_max_size,
+    )
+    model = Vits(vits_config, audio_processor, tokenizer, speaker_manager=None)
+    trainer = Trainer(
+        TrainerArgs(),
+        vits_config,
+        output_dir,
+        model=model,
+        train_samples=train_samples,
+        eval_samples=eval_samples,
+    )
+    trainer.fit()
+
 
 if __name__ == "__main__":
     main()
