@@ -361,6 +361,8 @@ def main() -> None:
                 print(f"Extracting {archive_path}")
                 extract_public_archive(archive_path, extracted_root)
                 extract_marker.write_text("done", encoding="utf-8")
+                if archives_cfg.get("delete_archive_after_extract", False) and archive_path.exists():
+                    archive_path.unlink()
 
         speaker_stats, filter_reasons, split_counts = collect_speaker_stats(
             iter_public_archive_examples(extracted_root, download_cfg, transcript_priority),
@@ -506,6 +508,14 @@ def main() -> None:
         "metadata_path": str(metadata_path),
     }
     write_json(summary_path, summary)
+
+    if source == "indicvoices_public_archives" and download_cfg.get("cleanup_extracted_after_curate", False):
+        if public_extracted_root is not None and public_extracted_root.exists():
+            shutil.rmtree(public_extracted_root)
+        archives_dir = output_root / "archives"
+        if archives_dir.exists():
+            shutil.rmtree(archives_dir)
+
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 

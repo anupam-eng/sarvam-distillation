@@ -18,9 +18,11 @@ download:
     - "verbatim"
   public_archives:
     language_name: "Hindi"
-    versions: [1, 2]
+    versions: [1, 2, 3, 4]
     archive_url_template: "https://iv-release.objectstore.e2enetworks.net/dmu_release/v{version}_{language_name}_train.tgz"
+    delete_archive_after_extract: true
   preserve_download_cache: true
+  cleanup_extracted_after_curate: true
   min_duration_seconds: 1.0
   max_duration_seconds: 12.0
   min_text_chars: 3
@@ -33,8 +35,8 @@ download:
     mode: "mixed_segments"
     speaker_id: ""
     min_speaker_hours: 0.5
-    max_hours: 6.0
-    max_samples: 12000
+    max_hours: 18.0
+    max_samples: 36000
 
 dataset:
   source_root: "data/raw/indicvoices_hindi"
@@ -53,7 +55,7 @@ dataset:
   min_audio_seconds: 1.0
   max_audio_seconds: 12.0
   eval_split_ratio: 0.02
-  eval_max_samples: 200
+  eval_max_samples: 300
   normalize_whitespace: true
   processed_dir: "data/processed/vits_dataset"
 
@@ -87,6 +89,21 @@ training:
   save_best_after: 1000
   lr_gen: 0.0002
   lr_disc: 0.0002
+
+monitoring:
+  enabled: true
+  poll_seconds: 60
+  min_checkpoint_step: 1000
+  eval_subset_size: 8
+  min_checkpoints_before_stop: 4
+  patience_checkpoints: 4
+  min_improvement: 0.05
+  overfit_margin: 0.15
+  use_cpu: true
+  metrics_path: "reports/monitoring/checkpoint_metrics.jsonl"
+  summary_path: "reports/monitoring/checkpoint_monitor_summary.json"
+  train_log_path: "reports/monitoring/train_vits.log"
+  train_pid_path: "reports/monitoring/train_vits.pid"
 
 inference:
   prompts_file: "data/processed/vits_dataset/eval_prompts.txt"
