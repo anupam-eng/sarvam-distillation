@@ -32,9 +32,9 @@ download:
   include_scenarios: []
   exclude_scenarios: []
   speaker_selection:
-    mode: "mixed_segments"
+    mode: "top_duration"
     speaker_id: ""
-    min_speaker_hours: 0.5
+    min_speaker_hours: 1.0
     max_hours: 18.0
     max_samples: 36000
 
@@ -84,21 +84,21 @@ training:
   num_eval_loader_workers: 2
   mixed_precision: true
   print_step: 25
-  save_step: 1000
+  save_step: 5000
   save_n_checkpoints: 5
-  save_best_after: 1000
+  save_best_after: 10000
   lr_gen: 0.0002
   lr_disc: 0.0002
 
 monitoring:
   enabled: true
-  poll_seconds: 60
-  min_checkpoint_step: 1000
+  poll_seconds: 120
+  min_checkpoint_step: 50000
   eval_subset_size: 8
-  min_checkpoints_before_stop: 4
-  patience_checkpoints: 4
-  min_improvement: 0.05
-  overfit_margin: 0.15
+  min_checkpoints_before_stop: 8
+  patience_checkpoints: 10
+  min_improvement: 0.02
+  overfit_margin: 0.30
   use_cpu: true
   metrics_path: "reports/monitoring/checkpoint_metrics.jsonl"
   summary_path: "reports/monitoring/checkpoint_monitor_summary.json"

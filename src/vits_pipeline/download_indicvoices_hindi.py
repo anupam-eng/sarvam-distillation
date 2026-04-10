@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import shutil
 import tarfile
 from collections import Counter, defaultdict
@@ -39,6 +40,12 @@ def selected_text(example: dict, transcript_priority: list[str]) -> str:
     return ""
 
 
+DISFLUENCY_MARKERS = re.compile(
+    r"\[(?:stammers?|inhaling|breathing|cough(?:ing)?|laughter|noise|pause|overlap|unclear|inaudible)\]",
+    re.IGNORECASE,
+)
+
+
 def matches_filters(example: dict, download_cfg: dict, transcript_priority: list[str]) -> tuple[bool, str]:
     text = selected_text(example, transcript_priority)
     duration = float(example.get("duration") or 0.0)
@@ -47,6 +54,8 @@ def matches_filters(example: dict, download_cfg: dict, transcript_priority: list
 
     if not text:
         return False, "missing_text"
+    if DISFLUENCY_MARKERS.search(text):
+        return False, "disfluency"
     if len(text) < int(download_cfg["min_text_chars"]) or len(text) > int(download_cfg["max_text_chars"]):
         return False, "text_length"
     if duration < float(download_cfg["min_duration_seconds"]) or duration > float(download_cfg["max_duration_seconds"]):
